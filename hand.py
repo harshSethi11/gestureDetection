@@ -6,7 +6,7 @@ from collections import deque, Counter
 import cv2
 import numpy as np
 
-# ---------- TTS (non-blocking on main thread via startLoop/iterate) ----------
+# TTS 
 _TTS = None
 _TTS_OK = False
 
@@ -14,14 +14,10 @@ def tts_init():
     """Initialize pyttsx3 SAPI5; fall back to beep if missing."""
     global _TTS, _TTS_OK
     try:
-        import pyttsx3  # requires comtypes & pywin32 on Windows
+        import pyttsx3  
         _TTS = pyttsx3.init(driverName='sapi5')
         _TTS.setProperty('rate', 175)
         _TTS.setProperty('volume', 1.0)
-        # Choose a voice if you want:
-        # for v in _TTS.getProperty("voices"):
-        #     if "en-IN" in v.name or "Zira" in v.name:
-        #         _TTS.setProperty("voice", v.id); break
         _TTS.startLoop(False)   # non-blocking
         _TTS_OK = True
     except Exception:
@@ -61,7 +57,7 @@ def speak_or_beep(message="Command"):
         except Exception:
             pass
 
-# ---------- Try MediaPipe ----------
+# Try MediaPipe 
 try:
     import mediapipe as mp
 except Exception:
@@ -69,13 +65,12 @@ except Exception:
     print("        pip install mediapipe")
     sys.exit(1)
 
-# ---------------- Config ----------------
+# Config 
 CAM_INDEX = 0
-FRAME_WIDTH = 960              # set None to keep native
-SMOOTH_WINDOW = 7              # majority vote window over last N predictions
-STABLE_FRAMES = 5              # min stable frames to accept a new gesture
-ANNOUNCE_COOLDOWN = 1.5        # seconds between voice/beep announcements
-
+FRAME_WIDTH = 960              
+SMOOTH_WINDOW = 7              
+STABLE_FRAMES = 5              
+ANNOUNCE_COOLDOWN = 1.5        
 # HUD colors
 GREEN = (60, 220, 60)
 YELLOW = (40, 180, 255)
@@ -91,7 +86,7 @@ SPOKEN = {
     "THUMBS_UP": "Drop"
 }
 
-# ------- Robust finger geometry (drop-in replacement) -------
+#  Robust finger geometry (drop-in replacement) 
 TIP_IDS = [4, 8, 12, 16, 20]     # thumb, index, middle, ring, pinky tips
 PIP_IDS = [3, 7, 11, 15, 19]     # PIP joints (thumb uses IP)
 MCP_IDS = [2, 5, 9, 13, 17]      # MCP joints (thumb MCP = 2)
@@ -100,7 +95,7 @@ WRIST_ID = 0
 MARGIN_Y = 0.02           # non-thumb slack
 MIN_EXT_LEN = 0.065       # non-thumb min length to call "extended"
 THUMB_MIN_LEN = 0.095     # thumb must be pretty long to consider at all
-THUMB_UP_MAX_ANGLE = 20   # tighter: within 20° of vertical
+THUMB_UP_MAX_ANGLE = 20   # tighter: within 20 degree of vertical
 THUMB_UP_MAX_HORIZ = 0.030  # horizontal drift tolerance for vertical thumb
 PALM_OPEN_RATIO = 0.85
 
@@ -118,7 +113,7 @@ def _finger_extended(landmarks, tip_id, pip_id, mcp_id):
 def _thumb_extended(landmarks):
     """
     Count thumb 'extended' only for clear sideways extension (open palm),
-    NOT for vertical (that's handled by _thumb_pointing_up).
+    NOT for vertical (that's handled by _thumb_pointing_up)
     """
     tip, mcp = landmarks[TIP_IDS[0]], landmarks[MCP_IDS[0]]
     dx = abs(tip.x - mcp.x)
@@ -131,7 +126,7 @@ def _thumb_extended(landmarks):
 def _thumb_pointing_up(landmarks):
     """
     True only if thumb is long, nearly vertical, minimal sideways drift,
-    and the tip is clearly above MCP.
+    and the tip is clearly above MCP
     """
     tip, mcp = landmarks[TIP_IDS[0]], landmarks[MCP_IDS[0]]
     vx, vy = (tip.x - mcp.x), (tip.y - mcp.y)
@@ -172,8 +167,6 @@ def detect_gesture(landmarks, _handedness_label_unused):
     up = fingers_up(landmarks)
     idx, mid, rng, pky = up['index'], up['middle'], up['ring'], up['pinky']
 
-    # --- FIST: all non-thumb down, and thumb NOT clearly extended ---
-    # Stricter thumb 'not extended' (close to palm)
     tip, mcp = landmarks[TIP_IDS[0]], landmarks[MCP_IDS[0]]
     thumb_dx = abs(tip.x - mcp.x)
     thumb_dy = tip.y - mcp.y
@@ -182,7 +175,7 @@ def detect_gesture(landmarks, _handedness_label_unused):
 
     # Compactness fallback: fingertips cluster near wrist when fist is made
     wrist = landmarks[WRIST_ID]
-    tip_ids_non_thumb = TIP_IDS[1:]  # index..pinky
+    tip_ids_non_thumb = TIP_IDS[1:]  
     tip_dists = [math.hypot(landmarks[t].x - wrist.x, landmarks[t].y - wrist.y) for t in tip_ids_non_thumb]
     avg_tip_to_wrist = sum(tip_dists) / len(tip_dists)
 
@@ -190,7 +183,7 @@ def detect_gesture(landmarks, _handedness_label_unused):
     if all_four_down and (thumb_not_extended or avg_tip_to_wrist < 0.13):
         return "FIST"
 
-    # --- STOP: open palm (ignore thumb) ---
+    #  STOP: open palm (ignore thumb) 
     if idx and mid and rng and pky:
         idx_len = _len(landmarks[TIP_IDS[1]].x, landmarks[TIP_IDS[1]].y,
                        landmarks[MCP_IDS[1]].x, landmarks[MCP_IDS[1]].y)
@@ -199,15 +192,15 @@ def detect_gesture(landmarks, _handedness_label_unused):
         if (idx_len + mid_len) / (2 * MIN_EXT_LEN) >= PALM_OPEN_RATIO:
             return "STOP"
 
-    # --- POINT: index up, others down (thumb ignored) ---
+    # POINT: index up, others down (thumb ignored) 
     if idx and not (mid or rng or pky):
         return "POINT"
 
-    # --- THUMBS_UP: thumb vertical up, others down ---
+    # THUMBS_UP: thumb vertical up, others down 
     if _thumb_pointing_up(landmarks) and not (idx or mid or rng or pky):
          return "THUMBS_UP"
 
-# ------------- Main -------------
+# Main 
 def main():
     # Init TTS once
     tts_init()
@@ -222,7 +215,6 @@ def main():
         tts_shutdown()
         return
 
-    # Resize hint
     if FRAME_WIDTH is not None:
         ret, fr = cap.read()
         if ret:
